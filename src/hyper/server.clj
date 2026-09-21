@@ -903,6 +903,8 @@
                                                                   [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
                                                                   [:title title]
                                                                   webkit-shim
+                                                                  [:script {:type "module"}
+                                                                   (c/raw (str "import * as sc from '" base-path "/hyper/squint-core.js';\nwindow.hyper_sc = sc;"))]
                                                                   datastar-script
                                                                   (when head-html (c/raw head-html))]
                                                                  [:body
@@ -1001,6 +1003,16 @@
       {:status  404
        :headers {"Content-Type" "text/plain"}
        :body    "No components registered"})))
+
+(defn- squint-core-js-handler
+  "Returns a handler that serves squint's core.js from the classpath."
+  []
+  (let [js (slurp (io/resource "squint/core.js"))]
+    (fn [_req]
+      {:status  200
+       :headers {"Content-Type"  "text/javascript; charset=utf-8"
+                 "Cache-Control" "no-cache"}
+       :body    js})))
 
 (defn- -navigation-parameters
   "Coerces navigation parameters with the matched GET route's compiled validator."
@@ -1275,7 +1287,8 @@
                           [(str base-path "/hyper/actions") {:post (action-handler app-state*)}]
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
-                          [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]]
+                          [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]
+                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler)}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.
          ;; Store global :watches so find-route-watches can prepend them to
