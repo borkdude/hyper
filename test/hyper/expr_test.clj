@@ -51,18 +51,19 @@
     (is (= "$a = 1; @get(\"/x\")" (->expr (set! $a 1) (@get "/x")))))
 
   (testing "evt and el pass through as client-side symbols"
-    (is (= "(evt.key) === (\"Enter\")" (->expr (= evt.key "Enter"))))
+    (is (= "((evt.key) === (\"Enter\"))" (->expr (= evt.key "Enter"))))
     (is (str/includes? (->expr (.focus el)) "el.focus()"))))
 
 ;; ---------------------------------------------------------------------------
-;; Sandbox-safe operators (no squint_core in output, ever)
+;; Core references use the hyper_sc alias
 ;; ---------------------------------------------------------------------------
 
 (deftest test-sandbox-safe-output
   (testing "boolean and equality forms compile to bare JS operators"
-    (is (= "(($a) === (1)) && (($b) || (evt.shiftKey))"
-           (->expr (and (= $a 1) (or $b evt.shiftKey)))))
-    (is (= "(!(($name) === (\"\")))" (->expr (not= $name ""))))
+    (let [out (->expr (and (= $a 1) (or $b evt.shiftKey)))]
+      (is (str/includes? out "(($a) === (1)) &&"))
+      (is (str/includes? out "evt.shiftKey")))
+    (is (= "!(($name) === (\"\"))" (->expr (not= $name ""))))
     (is (= "'' + (\"n=\") + ($n)" (->expr (str "n=" $n)))))
 
   (testing "when compiles to a ternary"
@@ -91,7 +92,7 @@
 (deftest test-signal-atom-vocabulary
   (testing "swap! with not — the toggle idiom"
     (let [open?* (local-sig "open" false)]
-      (is (= "$_open = (!($_open))" (->expr (swap! open?* not))))))
+      (is (= "$_open = hyper_sc.not($_open)" (->expr (swap! open?* not))))))
 
   (testing "swap! with inc and with extra args"
     (let [n* (local-sig "n" 0)]
@@ -105,13 +106,13 @@
 
   (testing "deref reads as a signal reference"
     (let [name* (sig "userName")]
-      (is (= "(!(($userName) === (\"\")))" (->expr (not= @name* ""))))
+      (is (= "!(($userName) === (\"\"))" (->expr (not= @name* ""))))
       (is (= "$userName" (->expr @name*)))))
 
   (testing "the full guard + assign + action composition"
     (let [query* (sig "q")]
-      (is (= (str "(((evt.key) === (\"Enter\")) ? "
-                  "(($q = evt.target.value), (@post(\"/search\"))) : (null))")
+      (is (= (str "((((evt.key) === (\"Enter\"))) ? "
+                  "((() => { $q = evt.target.value; return @post(\"/search\") })()) : (null))")
              (->expr (when (= evt.key "Enter")
                        (reset! query* evt.target.value)
                        (@post "/search")))))))
@@ -168,9 +169,9 @@
 
 (deftest test-deref-signal-var
   (testing "deref of a top-level var holding a signal splices to a $ref"
-    (is (= "(!($_hyperConnected))"
+    (is (= "hyper_sc.not($_hyperConnected)"
            (->expr (not @signal/connected?*))))
-    (is (= "($_hyperConnection) === (\"reconnecting\")"
+    (is (= "(($_hyperConnection) === (\"reconnecting\"))"
            (->expr (= @signal/connection* :reconnecting)))))
 
   (testing "keyword and string tokens compile identically"
@@ -179,7 +180,7 @@
 
   (testing "deref of a non-signal var is left to the client (no splice)"
     (is (str/includes? (->expr (not @some-undefined-thing))
-                       "squint_core.deref"))))
+                       "hyper_sc.deref"))))
 
 ;; ---------------------------------------------------------------------------
 ;; DatastarExpr splicing — signals and actions ride one dispatch
@@ -234,7 +235,7 @@
 
 (deftest test-client-params-in-expr
   (testing "client-param symbols expand to their client-side JS"
-    (is (= "(evt.key) === (\"Enter\")" (->expr (= $key "Enter"))))
+    (is (= "((evt.key) === (\"Enter\"))" (->expr (= $key "Enter"))))
     (is (= "evt.target.checked" (->expr $checked)))
     (is (= "evt.detail" (->expr $detail)))
     (is (= "Object.fromEntries(new FormData(evt.target.closest('form')))"

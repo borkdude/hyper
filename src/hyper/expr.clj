@@ -104,11 +104,11 @@
 (defn- expr-eq
   ([_ _ _x] true)
   ([_ _ x y]
-   (bool-expr (concat (list 'js* "(~{}) === (~{})") (list x y))))
+   (bool-expr (concat (list 'js* "((~{}) === (~{}))") (list x y))))
   ([_ _ x y & more]
    (let [args  (list* x y more)
          pairs (partition 2 1 args)
-         js    (str/join " && " (repeat (count pairs) "((~{}) === (~{}))"))]
+         js    (str "(" (str/join " && " (repeat (count pairs) "((~{}) === (~{}))")) ")")]
      (bool-expr (concat (list 'js* js) (mapcat identity pairs))))))
 
 (defn- expr-str
@@ -128,17 +128,11 @@
      (concat (list 'js* js) x))))
 
 (def ^:private macro-replacements
-  {'and      'expr/and
-   '&&       'expr/and
-   'or       'expr/or
-   '||       'expr/or
-   'if       'expr/if
-   'not      'expr/not
+  {'&&       'and
+   '||       'or
    '=        'expr/=
    'str      'expr/str
    'println  'expr/println
-   'when     'expr/when
-   'when-not 'expr/when-not
    'expr/raw 'expr/raw})
 
 (def ^:private compiler-macros
@@ -208,13 +202,8 @@
    squint_core.deref(get)(...) — restore Datastar's @action syntax."
   [js]
   (-> js
-      (str/replace #"squint_core\.deref\(squint_core\.(get)\)\s*\(" "@$1(")
-      (str/replace #"squint_core\.deref\(([a-zA-Z_$][a-zA-Z0-9_$]*)\)\s*\(" "@$1(")))
-
-(defn- replace-truth
-  "squint_core.truth_(x) -> !!(x) — no library runtime in the sandbox."
-  [js]
-  (str/replace js #"squint_core\.truth_\((.*)\)" "!!($1)"))
+      (str/replace #"hyper_sc\.deref\(hyper_sc\.(get)\)\s*\(" "@$1(")
+      (str/replace #"hyper_sc\.deref\(([a-zA-Z_$][a-zA-Z0-9_$]*)\)\s*\(" "@$1(")))
 
 (defn- collect-kebab-signals
   "All $signal symbols containing dashes, as name strings."
@@ -353,9 +342,9 @@
                                 :elide-exports true
                                 :top-level     false
                                 :context       :expr
+                                :core-alias    "hyper_sc"
                                 :macros        compiler-macros})
         replace-deref
-        replace-truth
         (restore-signal-casing processed)
         (str/replace #"\n" " ")
         str/trim

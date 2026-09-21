@@ -289,6 +289,21 @@
      [:button#bump-btn {:data-on:click (h/action (swap! n* inc))} "bump"]
      [:button#commit-btn {:data-on:click (h/action (h/commit! w*))} "commit"]]))
 
+(def ^:private truthiness-rows [{:name "alice"} {:name "bob"}])
+
+(defn- expr-truthiness-get [_]
+  (let [selected* (h/signal :selected nil)]
+    [:div
+     [:h1 "Test Expr Truthiness"]
+     [:ul (for [[i row] (map-indexed vector truthiness-rows)]
+            [:li {:id (str "row-" (:name row)) :data-on:click (h/expr (reset! selected* i))} (:name row)])]
+     [:button#delete-btn
+      {:data-on:click (h/expr (when @selected*
+                                (h/action (reset! (h/tab-cursor :deleted)
+                                                  (:name (nth truthiness-rows @selected*))))))}
+      "Delete"]
+     [:span#deleted @(h/tab-cursor :deleted "none")]]))
+
 (defn default-routes []
   [["/" {:name  :home
          :title "Home"
@@ -332,7 +347,11 @@
    ["/optimistic"
     {:name  :optimistic
      :title "Optimistic"
-     :get   #'optimistic-get}]])
+     :get   #'optimistic-get}]
+   ["/expr-truthiness"
+    {:name  :expr-truthiness
+     :title "Expr Truthiness"
+     :get   #'expr-truthiness-get}]])
 
 (def ^:dynamic *test-routes* (default-routes))
 
@@ -1459,6 +1478,27 @@
 
         (finally
           (close-browser! browser-info))))))
+
+(deftest ^:e2e expr-truthiness-test
+  (let [browser-info (launch-browser)
+        ctx          (new-context browser-info)
+        page         (new-page ctx)]
+    (try
+      (w/with-page page
+        (w/navigate (str base-url "/expr-truthiness"))
+        (wait-for-sse)
+
+        (testing "signal value 1 runs the embedded action"
+          (w/click "#row-bob")
+          (w/click "#delete-btn")
+          (is (wait-for-text "#deleted" "bob")))
+
+        (testing "signal value 0 runs the embedded action"
+          (w/click "#row-alice")
+          (w/click "#delete-btn")
+          (is (wait-for-text "#deleted" "alice"))))
+      (finally
+        (close-browser! browser-info)))))
 
 (deftest ^:e2e effects-combined-test
   (testing "multiple effects in one action all apply"
