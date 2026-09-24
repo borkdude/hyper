@@ -60,43 +60,6 @@
 ;; ---------------------------------------------------------------------------
 ;; Compiler macros (squint's :macros option) that replace the defaults.
 
-(defn- bool-expr [e]
-  (if (boolean? e)
-    e
-    (vary-meta e assoc :tag 'boolean)))
-
-(defn- expr-and
-  ([_ _] true)
-  ([_ _ x] x)
-  ([_ _ x & next]
-   (let [js (str/join " && " (repeat (inc (count next)) "(~{})"))]
-     (bool-expr (concat (list 'js* js) (cons x next))))))
-
-(defn- expr-or
-  ([_ _] nil)
-  ([_ _ x] x)
-  ([_ _ x & next]
-   (let [js (str/join " || " (repeat (inc (count next)) "(~{})"))]
-     (bool-expr (concat (list 'js* js) (cons x next))))))
-
-(defn- expr-not [_ _ x]
-  (bool-expr (concat (list 'js* "(!(~{}))") (list x))))
-
-(defn- expr-do
-  ([_ _] nil)
-  ([_ _ & exprs]
-   (let [js (str/join ", " (repeat (count exprs) "(~{})"))]
-     (concat (list 'js* js) exprs))))
-
-(defn- expr-if [_ _ test & body]
-  (list 'if (bool-expr test) (first body) (second body)))
-
-(defn- expr-when [_ _ test & body]
-  (list 'if (bool-expr test) (cons 'expr/do body)))
-
-(defn- expr-when-not [_ _ test & body]
-  (list 'if-not (bool-expr test) (cons 'expr/do body)))
-
 (defn- expr-println [_ _ & exprs]
   (let [js (str/join "," (repeat (count exprs) "(~{})"))]
     (concat (list 'js* (str "console.log(" js ")")) exprs)))
@@ -112,15 +75,8 @@
    'expr/raw 'expr/raw})
 
 (def ^:private compiler-macros
-  {'expr {'and      expr-and
-          'or       expr-or
-          'when     expr-when
-          'when-not expr-when-not
-          'do       expr-do
-          'if       expr-if
-          'not      expr-not
-          'println  expr-println
-          'raw      expr-raw}})
+  {'expr {'println expr-println
+          'raw     expr-raw}})
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-processing (form level)
