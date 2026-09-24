@@ -4,7 +4,8 @@
   (:require [babashka.esbuild :as esbuild]
             [babashka.fs :as fs]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [hyper.brotli :as br]))
 
 (def ^:private core-dir
   (delay
@@ -14,13 +15,15 @@
       dir)))
 
 (def core-js
-  "Returns minified JS that exports vars, a set of munged squint core names."
+  "Returns a map with :js, minified JS that exports vars, and :br, the same JS brotli-compressed.
+   vars is a set of munged squint core names."
   (memoize
     (fn [vars]
       (let [entry (fs/file @core-dir (str "entry-" (hash vars) ".js"))]
         (spit entry (str "export { " (str/join ", " (sort vars)) " } from './core.js';\n"))
-        (-> (esbuild/build {:entry-points [(str entry)]
-                            :bundle       true
-                            :format       :esm
-                            :minify       true})
-            :outputs first :contents)))))
+        (let [js (-> (esbuild/build {:entry-points [(str entry)]
+                                     :bundle       true
+                                     :format       :esm
+                                     :minify       true})
+                     :outputs first :contents)]
+          {:js js :br (br/compress js :quality 11)})))))
