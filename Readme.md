@@ -2064,8 +2064,7 @@ org.babashka/esbuild {:mvn/version "0.1.1"}
 
 The `org.babashka/esbuild` library calls esbuild through the JVM's foreign
 function API. Add `--enable-native-access=ALL-UNNAMED` to your JVM options to
-avoid the JVM's native access warning. Without esbuild on the classpath,
-`create-handler` throws.
+avoid the JVM's native access warning.
 
 ### Editor indentation
 
