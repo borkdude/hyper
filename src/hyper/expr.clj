@@ -108,9 +108,7 @@
      (concat (list 'js* js) x))))
 
 (def ^:private macro-replacements
-  {'&&       'and
-   '||       'or
-   'println  'expr/println
+  {'println  'expr/println
    'expr/raw 'expr/raw})
 
 (def ^:private compiler-macros
