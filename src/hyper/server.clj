@@ -146,6 +146,20 @@
                 :headers (:headers render-result)
                 :tab-id  tab-id})))))
 
+(def ^:private squint-core-sha
+  (delay
+    (.formatHex (java.util.HexFormat/of)
+                (.digest (java.security.MessageDigest/getInstance "SHA-256")
+                         (.getBytes ^String (slurp (io/resource "squint/core.js")) "UTF-8")))))
+
+(defn- squint-core-version
+  "Returns a version string for the squint core that /hyper/squint-core.js serves.
+   The version changes if the served JS changes."
+  [app-state*]
+  (if (:tree-shake? @app-state*)
+    (Integer/toHexString (hash [@squint-core-sha @expr/core-vars*]))
+    (subs @squint-core-sha 0 12)))
+
 (defn- handle-full-render
   "Perform a full page render and send the assembled SSE events (head update,
    body fragment, signal patches).  Sweeps stale actions/reactive components
@@ -176,6 +190,7 @@
         (let [head-event   (render/format-head-update title head-html)
               sig-attrs    (signal/format-signal-attrs declared-signals)
               div-attrs    (cond-> {:id "hyper-app"}
+                             (:tree-shake? @app-state*) (assoc :data-hyper-core (squint-core-version app-state*))
                              url       (assoc :data-hyper-url url)
                              sig-attrs (merge sig-attrs))
               wrapped-html (c/html [:div div-attrs (c/raw body-html)])
@@ -835,16 +850,21 @@
     window.history.replaceState({title: document.title}, '', window.location.href);
     var observer = new MutationObserver(function(mutations) {
       for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].attributeName === 'data-hyper-core') {
+          var core = appEl.getAttribute('data-hyper-core');
+          if (window.hyper_sc_v && core && core !== window.hyper_sc_v) {
+            window.location.reload();
+          }
+        }
         if (mutations[i].attributeName === 'data-hyper-url') {
           var url = appEl.getAttribute('data-hyper-url');
           if (url && url !== window.location.pathname + window.location.search) {
             window.history.replaceState({title: document.title}, '', url);
           }
-          break;
         }
       }
     });
-    observer.observe(appEl, { attributes: true, attributeFilter: ['data-hyper-url'] });
+    observer.observe(appEl, { attributes: true, attributeFilter: ['data-hyper-url', 'data-hyper-core'] });
   }
   window.addEventListener('pageshow', function(event) {
     var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
@@ -879,7 +899,7 @@
    Shared by page-handler and not-found-handler so both emit identical document
    scaffolding, differing only in `status` and `fallback-title` (the <title>
    used when the result has no :title)."
-  [result {:keys [datastar-script open-when-hidden? base-path webkit-sse-shim?]
+  [result {:keys [datastar-script open-when-hidden? base-path webkit-sse-shim? core-version tree-shake?]
            :or   {open-when-hidden? true
                   base-path         ""
                   webkit-sse-shim?  true}}
@@ -888,6 +908,7 @@
         title                                                (or title fallback-title)
         sig-attrs                                            (signal/format-signal-attrs declared-signals)
         div-attrs                                            (cond-> {:id "hyper-app"}
+                                                               tree-shake? (assoc :data-hyper-core core-version)
                                                                sig-attrs (merge sig-attrs))
         ;; WebKit/Safari fetch-streaming strand workaround: inject the
         ;; EventSource shim only for affected user agents, before the datastar
@@ -905,7 +926,9 @@
                                                                   [:title title]
                                                                   webkit-shim
                                                                   [:script {:type "module"}
-                                                                   (c/raw (str "import * as sc from '" base-path "/hyper/squint-core.js';\nwindow.hyper_sc = sc;"))]
+                                                                   (c/raw (str "import * as sc from '" base-path "/hyper/squint-core.js?v=" core-version "';\n"
+                                                                               "window.hyper_sc = sc;"
+                                                                               (when tree-shake? (str "\nwindow.hyper_sc_v = '" core-version "';"))))]
                                                                   datastar-script
                                                                   (when head-html (c/raw head-html))]
                                                                  [:body
@@ -946,7 +969,7 @@
           ;; Ring response passthrough (e.g. a 302 redirect)
           (if (:status result)
             result
-            (page-response result opts req tab-id 200 "Hyper App")))))))
+            (page-response result (assoc opts :core-version (squint-core-version app-state*) :tree-shake? (:tree-shake? @app-state*)) req tab-id 200 "Hyper App")))))))
 
 (defn- not-found-handler
   "Reitit default-handler for unmatched routes: renders the configured
@@ -972,7 +995,7 @@
         ;; Ring response passthrough (e.g. a redirect from render middleware)
         (if (:status result)
           result
-          (page-response result opts req tab-id 404 "Not Found"))))))
+          (page-response result (assoc opts :core-version (squint-core-version app-state*) :tree-shake? (:tree-shake? @app-state*)) req tab-id 404 "Not Found"))))))
 
 (defn- components-js-handler
   "Serve the assembled client-components ES module bundle.
@@ -1007,8 +1030,9 @@
 
 (defn- squint-core-js-handler
   "Returns a handler that serves squint's core.js from the classpath.
-   Serves only the functions h/expr output uses if tree-shake? is true, which needs babashka.esbuild."
-  [tree-shake?]
+   Serves only the functions h/expr output uses if tree-shake? is true, which needs babashka.esbuild.
+   Caches the response as immutable if its v query parameter is the current version."
+  [app-state* tree-shake?]
   (let [js      (slurp (io/resource "squint/core.js"))
         js-br   (delay (br/compress js :quality 11))
         core-js (when tree-shake? (requiring-resolve 'hyper.expr.bundle/core-js))]
@@ -1021,7 +1045,10 @@
                    :else   js)]
         {:status  200
          :headers (cond-> {"Content-Type"  "text/javascript; charset=utf-8"
-                           "Cache-Control" "no-cache"}
+                           "Cache-Control" (if (= (get-in req [:query-params "v"])
+                                                  (squint-core-version app-state*))
+                                             "public, max-age=31536000, immutable"
+                                             "no-cache")}
                     br? (assoc "Content-Encoding" "br"))
          :body    body}))))
 
@@ -1299,7 +1326,7 @@
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
                           [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]
-                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler (:tree-shake? opts))}]]
+                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler app-state* (:tree-shake? opts))}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.
          ;; Store global :watches so find-route-watches can prepend them to
@@ -1319,7 +1346,8 @@
                                 :disconnect-grace-ms disconnect-grace-ms
                                 :heartbeat-ms heartbeat-ms
                                 :open-when-hidden? (get opts :open-when-hidden? true)
-                                :squint-core-url (:squint-core-url opts))
+                                :squint-core-url (:squint-core-url opts)
+                                :tree-shake? (:tree-shake? opts))
          initial-routes  (if (var? routes) @routes routes)
          initial-handler (build-ring-handler initial-routes app-state* page-wrapper system-routes default-handler)
          handler         (if (var? routes)

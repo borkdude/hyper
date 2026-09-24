@@ -279,6 +279,16 @@
       (is (bytes? (:body response)))
       (is (identical? (:body response) (:body (handler request)))))))
 
+(deftest test-squint-core-version
+  (testing "the versioned squint core URL of a page is cached as immutable"
+    (let [handler (server/create-handler [["/" {:get (fn [_] [:div])}]] (atom (state/init-state)))
+          page    (:body (handler {:uri "/" :request-method :get}))
+          v       (second (re-find #"squint-core\.js\?v=([0-9a-f]+)" page))]
+      (is (= "public, max-age=31536000, immutable"
+             (get-in (handler {:uri          "/hyper/squint-core.js" :request-method :get
+                               :query-string (str "v=" v)})
+                     [:headers "Cache-Control"]))))))
+
 (deftest test-open-when-hidden
   (testing "Default includes openWhenHidden: true in data-init"
     (let [app-state* (atom (state/init-state))

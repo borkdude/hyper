@@ -9,6 +9,7 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [hyper.core :as h]
             [hyper.effects :as effects]
+            [hyper.server]
             [hyper.state :as state]
             [wally.main :as w])
   (:import (com.microsoft.playwright Playwright BrowserType$LaunchOptions)))
@@ -1511,6 +1512,31 @@
           (w/click "#delete-btn")
           (is (wait-for-text "#deleted" "alice"))))
       (finally
+        (close-browser! browser-info)))))
+
+(deftest ^:e2e squint-core-version-reload-test
+  (let [browser-info (launch-browser)
+        ctx          (new-context browser-info)
+        page         (new-page ctx)
+        tree-shake?  (:tree-shake? @@test-state*)]
+    (swap! @test-state* assoc :tree-shake? true)
+    (try
+      (w/with-page page
+        (w/navigate (str base-url "/counters"))
+        (wait-for-sse)
+        (wait-for-text "#counter-Session h2" "Session: 0")
+        (eval-js "window.__sameDocument = true")
+        (with-redefs-fn {#'hyper.server/squint-core-version (constantly "changed")}
+          (fn []
+            (click-counter-button "Session" ".inc")
+
+            (testing "a changed data-hyper-core reloads the page"
+              (is (wait-for-pred #(nil? (eval-js "window.__sameDocument")) :timeout 10000)))
+
+            (testing "the reloaded page imports the changed squint core version"
+              (is (wait-for-pred #(= "changed" (eval-js "window.hyper_sc_v")) :timeout 10000))))))
+      (finally
+        (swap! @test-state* assoc :tree-shake? tree-shake?)
         (close-browser! browser-info)))))
 
 (deftest ^:e2e expr-nested-test
