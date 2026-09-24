@@ -929,6 +929,8 @@
    - :squint-core-url   — Override of the squint core.js URL used by the client
                           components bundle (default: version-matched jsDelivr CDN).
                           Point at a self-hosted copy for offline/air-gapped deploys.
+   - :tree-shake        - Serve only the squint core functions that h/expr output
+                          uses. Needs babashka.esbuild on the classpath.
    - :head              — Hiccup nodes appended to the HTML <head>, or (fn [req] ...) -> hiccup
    - :webkit-sse-shim?  — Inject a small client shim (into <head>, only for WebKit/Safari
                           user agents) that routes the GET render stream through a native
@@ -1003,7 +1005,7 @@
      (stop! app)"
   [routes & {:keys [app-state head static-resources static-dir watches
                     datastar-script base-path middleware render-middleware
-                    render-error squint-core-url render-guard
+                    render-error squint-core-url tree-shake render-guard
                     max-file-size max-file-count upload-expires-in]
              :or   {app-state       (atom (state/init-state))
                     datastar-script server/default-datastar-script}
@@ -1017,7 +1019,8 @@
                                   :base-path         base-path
                                   :middleware        middleware
                                   :render-middleware render-middleware
-                                  :squint-core-url   squint-core-url}
+                                  :squint-core-url   squint-core-url
+                                  :tree-shake        tree-shake}
                            ;; Only forward when supplied so server defaults apply.
                            render-error (assoc :render-error render-error)
                            render-guard (assoc :render-guard render-guard)

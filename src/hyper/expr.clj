@@ -233,6 +233,19 @@
 ;; Compilation
 ;; ---------------------------------------------------------------------------
 
+(defonce ^{:doc "Munged squint core names referenced by compiled expressions."}
+  core-vars*
+  (atom (sorted-set)))
+
+(defn- record-core-vars! [js]
+  (let [names (into []
+                    (comp (map second)
+                          (filter #(contains? squint/core-vars (symbol %))))
+                    (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js))]
+    (when (seq names)
+      (swap! core-vars* into names))
+    js))
+
 (defn compile-form
   "Compile a single (boundary-inferred) form to a Datastar expression
    string.  Public for testing."
@@ -248,6 +261,7 @@
                                 :core-alias    "hyper_sc"
                                 :macros        compiler-macros})
         replace-deref
+        record-core-vars!
         (restore-signal-casing processed)
         (str/replace #"\n" " ")
         str/trim

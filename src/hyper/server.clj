@@ -13,6 +13,7 @@
             [hyper.component.bundle :as component.bundle]
             [hyper.context :as context]
             [hyper.effects :as effects]
+            [hyper.expr :as expr]
             [hyper.lifecycle :as lifecycle]
             [hyper.reactive :as reactive]
             [hyper.render :as render]
@@ -1005,14 +1006,18 @@
        :body    "No components registered"})))
 
 (defn- squint-core-js-handler
-  "Returns a handler that serves squint's core.js from the classpath."
-  []
-  (let [js (slurp (io/resource "squint/core.js"))]
+  "Returns a handler that serves squint's core.js from the classpath.
+   Serves only the functions h/expr output uses if tree-shake is true, which needs babashka.esbuild."
+  [tree-shake]
+  (let [js      (slurp (io/resource "squint/core.js"))
+        core-js (when tree-shake (requiring-resolve 'hyper.expr.bundle/core-js))]
     (fn [_req]
       {:status  200
        :headers {"Content-Type"  "text/javascript; charset=utf-8"
                  "Cache-Control" "no-cache"}
-       :body    js})))
+       :body    (if core-js
+                  (core-js (set @expr/core-vars*))
+                  js)})))
 
 (defn- -navigation-parameters
   "Coerces navigation parameters with the matched GET route's compiled validator."
@@ -1288,7 +1293,7 @@
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
                           [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]
-                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler)}]]
+                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler (:tree-shake opts))}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.
          ;; Store global :watches so find-route-watches can prepend them to

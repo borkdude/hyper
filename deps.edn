@@ -53,6 +53,11 @@
                         :fail-fast? true}}
   :dev   {:extra-deps {io.github.tonsky/clj-reload {:mvn/version "1.0.0"}}}
 
+  ;; Serves only the squint core functions that h/expr output uses.
+  :expr-bundle {:extra-deps {io.github.babashka/esbuild {:mvn/version "0.1.1"}
+                             org.babashka/ffi           {:mvn/version "0.1.2"}}
+                :jvm-opts   ["--enable-native-access=ALL-UNNAMED"]}
+
   ;; Build, install, deploy. See dev/build.clj.
   ;; Invoke with: clj -T:build <task>
   :build {:deps       {io.github.clojure/tools.build {:git/tag "v0.10.7" :git/sha "573711e"}
