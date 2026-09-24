@@ -177,7 +177,13 @@
     (let [expansion (macroexpand-1 '(hyper.expr/->expr (set! $x ~(compute))))]
       (is (seq? expansion))
       (is (= 'hyper.expr/substitute (first expansion)))
-      (is (string? (second expansion)) "template compiled at expansion, not per call"))))
+      (is (string? (second expansion)) "template compiled at expansion, not per call")))
+
+  (testing "evaluating an expansion records its squint core names in core-vars*"
+    (let [expansion (macroexpand-1 '(hyper.expr/->expr (or $a $b)))]
+      (with-redefs [expr/core-vars* (atom (sorted-set))]
+        (eval expansion)
+        (is (contains? @expr/core-vars* "truth_"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Deref of static signal vars (e.g. the connection signals)
