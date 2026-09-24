@@ -35,20 +35,30 @@
 
 (deftest test-raw-datastar-style
   (testing "set! on $signals"
-    (is (= "$count = 0" (->expr (set! $count 0)))))
+    (is (= "($count = 0)" (->expr (set! $count 0)))))
 
   (testing "kebab-case signal names are preserved"
-    (is (= "$record-id = 5" (->expr (set! $record-id 5)))))
+    (is (= "($record-id = 5)" (->expr (set! $record-id 5)))))
 
   (testing "namespaced signals"
-    (is (= "$person.name = \"alice\"" (->expr (set! $person.name "alice")))))
+    (is (= "($person.name = \"alice\")" (->expr (set! $person.name "alice")))))
 
   (testing "actions"
     (is (= "@post(\"/update\")" (->expr (@post "/update"))))
     (is (= "@get(\"/poke\")" (->expr (@get "/poke")))))
 
   (testing "multiple statements join with ;"
-    (is (= "$a = 1; @get(\"/x\")" (->expr (set! $a 1) (@get "/x")))))
+    (is (= "($a = 1); @get(\"/x\")" (->expr (set! $a 1) (@get "/x")))))
+
+  (testing "a form with a ; returns its value through __hyper_r"
+    (let [out (->expr (when-let [x (or $a $b)] x))]
+      (is (str/starts-with? out "var __hyper_r = ((() => {"))
+      (is (str/ends-with? out "; return __hyper_r;"))))
+
+  (testing "earlier statements precede the __hyper_r variable"
+    (let [out (->expr (set! $z 1) (when-let [x (or $a $b)] x))]
+      (is (str/starts-with? out "($z = 1); var __hyper_r = ("))
+      (is (str/ends-with? out "; return __hyper_r;"))))
 
   (testing "evt and el pass through as client-side symbols"
     (is (= "((evt.key) === (\"Enter\"))" (->expr (= evt.key "Enter"))))
@@ -61,7 +71,8 @@
 (deftest test-sandbox-safe-output
   (testing "boolean and equality forms compile to bare JS operators"
     (let [out (->expr (and (= $a 1) (or $b evt.shiftKey)))]
-      (is (str/includes? out "(($a) === (1)) &&"))
+      (is (str/includes? out "(($a) === (1))"))
+      (is (str/includes? out "&&"))
       (is (str/includes? out "evt.shiftKey")))
     (is (= "!(($name) === (\"\"))" (->expr (not= $name ""))))
     (is (= "'' + (\"n=\") + ($n)" (->expr (str "n=" $n)))))
@@ -92,16 +103,16 @@
 (deftest test-signal-atom-vocabulary
   (testing "swap! with not — the toggle idiom"
     (let [open?* (local-sig "open" false)]
-      (is (= "$_open = hyper_sc.not($_open)" (->expr (swap! open?* not))))))
+      (is (= "($_open = hyper_sc.not($_open))" (->expr (swap! open?* not))))))
 
   (testing "swap! with inc and with extra args"
     (let [n* (local-sig "n" 0)]
-      (is (= "$_n = ($_n + 1)" (->expr (swap! n* inc))))
-      (is (= "$_n = ($_n + 5)" (->expr (swap! n* + 5))))))
+      (is (= "($_n = ($_n + 1))" (->expr (swap! n* inc))))
+      (is (= "($_n = ($_n + 5))" (->expr (swap! n* + 5))))))
 
   (testing "reset! from a client-side value"
     (let [query* (sig "searchQuery")]
-      (is (= "$searchQuery = evt.target.value"
+      (is (= "($searchQuery = evt.target.value)"
              (->expr (reset! query* evt.target.value))))))
 
   (testing "deref reads as a signal reference"
@@ -111,8 +122,9 @@
 
   (testing "the full guard + assign + action composition"
     (let [query* (sig "q")]
-      (is (= (str "((((evt.key) === (\"Enter\"))) ? "
-                  "((() => { $q = evt.target.value; return @post(\"/search\") })()) : (null))")
+      (is (= (str "var __hyper_r = (((((evt.key) === (\"Enter\"))) ? "
+                  "((() => { $q = evt.target.value; return @post(\"/search\") })()) : (null))); "
+                  "return __hyper_r;")
              (->expr (when (= evt.key "Enter")
                        (reset! query* evt.target.value)
                        (@post "/search")))))))
@@ -130,22 +142,22 @@
   (testing "locals splice as JS literals"
     (let [factor 2
           label  "a'b"]
-      (is (= "$scaled = ($raw * 2)" (->expr (set! $scaled (* $raw factor)))))
-      (is (= "$label = 'a\\'b'" (->expr (set! $label label)))
+      (is (= "($scaled = ($raw * 2))" (->expr (set! $scaled (* $raw factor)))))
+      (is (= "($label = 'a\\'b')" (->expr (set! $label label)))
           "strings are escaped JS literals")))
 
   (testing "keyword-call forms evaluate as Clojure"
     (let [person {:id 1234 :name "alice"}]
-      (is (= "$person-id = 1234" (->expr (set! $person-id (:id person)))))
-      (is (= "$person-name = 'alice'" (->expr (set! $person-name (:name person)))))))
+      (is (= "($person-id = 1234)" (->expr (set! $person-id (:id person)))))
+      (is (= "($person-name = 'alice')" (->expr (set! $person-name (:name person)))))))
 
   (testing "explicit unquote still works as the escape hatch"
     (let [v 42]
-      (is (= "$x = 43" (->expr (set! $x ~(inc v)))))))
+      (is (= "($x = 43)" (->expr (set! $x ~(inc v)))))))
 
   (testing "collections splice as JS literals"
     (let [xs [1 2 3]]
-      (is (= "$items = [1, 2, 3]" (->expr (set! $items xs)))))))
+      (is (= "($items = [1, 2, 3])" (->expr (set! $items xs)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Compile-once semantics
@@ -247,7 +259,7 @@
              (->expr (reset! q* $value))))))
 
   (testing "non-param $signals still pass through untouched"
-    (is (= "$count = 0" (->expr (set! $count 0))))
+    (is (= "($count = 0)" (->expr (set! $count 0))))
     (let [name* (sig "userName")]
       (is (= "$userName" (->expr @name*)))))
 

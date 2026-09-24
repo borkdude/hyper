@@ -376,6 +376,16 @@
           template
           pairs))
 
+;; Datastar adds `return` after the last `;`, even one inside a nested function (datastar#1215).
+(defn- join-statements
+  "Returns jss, the compiled forms, joined with `;`.
+   Returns the last form through `__hyper_r` if any form contains a `;`."
+  [jss]
+  (if (some #(str/includes? % ";") jss)
+    (str (str/join (map #(str % "; ") (butlast jss)))
+         "var __hyper_r = (" (last jss) "); return __hyper_r;")
+    (str/join "; " jss)))
+
 ;; ---------------------------------------------------------------------------
 ;; The macro
 ;; ---------------------------------------------------------------------------
@@ -402,7 +412,7 @@
   (let [env-locals (set (keys &env))
         pairs*     (atom [])
         forms*     (mapv #(infer-boundary % env-locals pairs*) forms)
-        template   (str/join "; " (map compile-form forms*))
+        template   (join-statements (map compile-form forms*))
         pairs      @pairs*]
     (if (empty? pairs)
       template

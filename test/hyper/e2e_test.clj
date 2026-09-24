@@ -304,6 +304,14 @@
       "Delete"]
      [:span#deleted @(h/tab-cursor :deleted "none")]]))
 
+(defn- expr-nested-get [_]
+  (let [a* (h/signal :a false)
+        b* (h/signal :b 7)]
+    [:div
+     [:h1 "Test Expr Nested"]
+     [:span#when-let {:data-text (h/expr (when-let [x (or @a* @b*)] x))}]
+     [:span#re-find {:data-text (h/expr (let [s (or @a* "xa;by")] (re-find #"a;b" s)))}]]))
+
 (defn default-routes []
   [["/" {:name  :home
          :title "Home"
@@ -351,7 +359,11 @@
    ["/expr-truthiness"
     {:name  :expr-truthiness
      :title "Expr Truthiness"
-     :get   #'expr-truthiness-get}]])
+     :get   #'expr-truthiness-get}]
+   ["/expr-nested"
+    {:name  :expr-nested
+     :title "Expr Nested"
+     :get   #'expr-nested-get}]])
 
 (def ^:dynamic *test-routes* (default-routes))
 
@@ -1497,6 +1509,23 @@
           (w/click "#row-alice")
           (w/click "#delete-btn")
           (is (wait-for-text "#deleted" "alice"))))
+      (finally
+        (close-browser! browser-info)))))
+
+(deftest ^:e2e expr-nested-test
+  (let [browser-info (launch-browser)
+        ctx          (new-context browser-info)
+        page         (new-page ctx)]
+    (try
+      (w/with-page page
+        (w/navigate (str base-url "/expr-nested"))
+        (wait-for-sse)
+
+        (testing "when-let over or renders the second operand"
+          (is (wait-for-text "#when-let" "7")))
+
+        (testing "re-find of #\"a;b\" inside let renders the match"
+          (is (wait-for-text "#re-find" "a;b"))))
       (finally
         (close-browser! browser-info)))))
 
