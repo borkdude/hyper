@@ -238,8 +238,11 @@
   (atom (sorted-set)))
 
 ;; A future squint release adds the used core names to the compiler output, which replaces this regex.
-(defn- core-vars-of [js]
-  (into (sorted-set) (map second) (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js)))
+(defn core-vars-of
+  "Returns the squint core names that js references through alias."
+  [alias js]
+  (into (sorted-set) (map second)
+        (re-seq (re-pattern (str (java.util.regex.Pattern/quote alias) "\\.([A-Za-z_$][\\w$]*)")) js)))
 
 (defn use-core-vars!
   "Adds names to core-vars*.
@@ -333,7 +336,7 @@
         pairs*     (atom [])
         forms*     (mapv #(infer-boundary % env-locals pairs*) forms)
         template   (join-statements (map compile-form forms*))
-        names      (core-vars-of template)
+        names      (core-vars-of "hyper_sc" template)
         pairs      @pairs*
         js         (if (empty? pairs)
                      template

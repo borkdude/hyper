@@ -136,14 +136,13 @@
   (with-fresh-registry
     (testing "nil when no components are registered"
       (is (nil? (hcb/bundle)))
-      (is (nil? (hcb/head-script-tag "" nil))))
+      (is (nil? (hcb/head-script-tag ""))))
 
     (hc/register-component! "a-widget" {:attrs [:v] :render "(fn [{:keys [v]} _] [:em v])"})
 
     (testing "bundle is a single ES module: prelude, runtime, components"
       (let [{:keys [js hash]} (hcb/bundle)]
-        (is (str/starts-with? js "import * as $sc from"))
-        (is (str/includes? js hcb/default-squint-core-url))
+        (is (str/starts-with? js "const $sc = window.hyper_sc;"))
         (is (str/includes? js "function $define(") "runtime shim included")
         (is (str/includes? js "$define(\"a-widget\"") "component included")
         (is (= 16 (count hash)))))
@@ -151,17 +150,17 @@
     (testing "bundle is cached against the registry snapshot"
       (is (identical? (hcb/bundle) (hcb/bundle))))
 
-    (testing "core url override lands in the prelude"
-      (is (str/includes? (:js (hcb/bundle {:squint-core-url "/vendor/squint-core.js"}))
-                         "from '/vendor/squint-core.js'")))
-
     (testing "registering another component changes the hash and sorts by name"
       (let [h1 (:hash (hcb/bundle))]
         (hc/register-component! "b-widget" {:attrs [] :render "(fn [_ _] [:i])"})
         (let [{:keys [js hash]} (hcb/bundle)]
           (is (not= h1 hash))
           (is (< (str/index-of js "$define(\"a-widget\"")
-                 (str/index-of js "$define(\"b-widget\""))))))))
+                 (str/index-of js "$define(\"b-widget\""))))))
+
+    (testing "core-vars returns the $sc names of registered components"
+      (hc/register-component! "c-widget" {:attrs [:v] :render "(fn [{:keys [v]} _] [:em (count v)])"})
+      (is (contains? (hcb/core-vars) "count")))))
 
 ;; ---------------------------------------------------------------------------
 ;; Macro-time hiccup compilation
@@ -455,7 +454,7 @@
   (with-fresh-registry
     (hc/register-component! "a-widget" {:attrs [] :render "(fn [_ _] [:i])"})
     (testing "script tag carries base-path and content hash"
-      (let [[tag attrs] (hcb/head-script-tag "/my-app" nil)]
+      (let [[tag attrs] (hcb/head-script-tag "/my-app")]
         (is (= :script tag))
         (is (= "module" (:type attrs)))
         (is (str/starts-with? (:src attrs) "/my-app/hyper/components.js?v="))

@@ -279,6 +279,13 @@
       (is (bytes? (:body response)))
       (is (identical? (:body response) (:body (handler request)))))))
 
+(deftest test-squint-core-url
+  (testing ":squint-core-url replaces the squint core URL of a page"
+    (let [handler (server/create-handler [["/" {:get (fn [_] [:div])}]] (atom (state/init-state))
+                                         {:squint-core-url "/vendor/core.js"})]
+      (is (string/includes? (:body (handler {:uri "/" :request-method :get}))
+                            "import * as sc from '/vendor/core.js'")))))
+
 (deftest test-squint-core-version
   (testing "the versioned squint core URL of a page is cached as immutable"
     (let [handler (server/create-handler [["/" {:get (fn [_] [:div])}]] (atom (state/init-state)))
@@ -1096,9 +1103,8 @@
       (try
         (reset! component/registry* {})
         (component/register-component! "x-widget" {:attrs [] :render "(fn [_ _] [:i])"})
-        (let [app-state* (atom {})
-              handler    (#'server/components-js-handler app-state*)
-              hash       (:hash (bundle/bundle))]
+        (let [handler (#'server/components-js-handler)
+              hash    (:hash (bundle/bundle))]
           (testing "matching ?v -> immutable (true content-addressed cache)"
             (let [resp (handler {:query-params {"v" hash}})]
               (is (= 200 (:status resp)))
@@ -1124,9 +1130,8 @@
     (let [saved @component/registry*]
       (try
         (reset! component/registry* {})
-        (let [app-state* (atom {})
-              handler    (#'server/components-js-handler app-state*)
-              resp       (handler {:query-params {"v" "anything"}})]
+        (let [handler (#'server/components-js-handler)
+              resp    (handler {:query-params {"v" "anything"}})]
           (is (= 404 (:status resp))))
         (finally
           (reset! component/registry* saved))))))

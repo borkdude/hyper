@@ -156,7 +156,8 @@
 (use-fixtures :once
   (fn [f]
     (let [app-state (atom (state/init-state))
-          handler   (h/create-handler #'routes :app-state app-state)]
+          handler   (h/create-handler #'routes :app-state app-state
+                                      :tree-shake? (= "true" (System/getProperty "hyper.tree-shake")))]
       (reset! test-server (h/start! handler {:port test-port}))
       (try
         (f)
