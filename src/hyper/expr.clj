@@ -37,9 +37,8 @@
      Datastar actions (`(@post \"/x\")`), JS interop and operators.
 
    Compilation happens at macro-expansion time via Squint — runtime cost
-   is string interpolation of spliced values only.  Output is
-   dependency-free JavaScript for Datastar's sandboxed evaluator:
-   `and`/`or`/`not`/`str` etc. emit bare JS operators, never library calls.
+   is string interpolation of spliced values only.  Output calls squint
+   core through the `hyper_sc` global, which hyper serves.
 
    The transpiler core is ported, with gratitude, from Casey Link's
    datastar-expressions (https://github.com/outskirtslabs/datastar-expressions,
@@ -59,10 +58,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Squint special-form overrides
 ;; ---------------------------------------------------------------------------
-;; Datastar expressions run in a sandboxed evaluator with no library
-;; runtime, so boolean/control/string forms must compile to bare JS
-;; operators rather than squint_core calls.  These compiler macros
-;; (squint's :macros option) replace the defaults.
+;; Compiler macros (squint's :macros option) that replace the defaults.
 
 (defn- bool-expr [e]
   (if (boolean? e)
@@ -101,22 +97,6 @@
 (defn- expr-when-not [_ _ test & body]
   (list 'if-not (bool-expr test) (cons 'expr/do body)))
 
-(defn- expr-eq
-  ([_ _ _x] true)
-  ([_ _ x y]
-   (bool-expr (concat (list 'js* "((~{}) === (~{}))") (list x y))))
-  ([_ _ x y & more]
-   (let [args  (list* x y more)
-         pairs (partition 2 1 args)
-         js    (str "(" (str/join " && " (repeat (count pairs) "((~{}) === (~{}))")) ")")]
-     (bool-expr (concat (list 'js* js) (mapcat identity pairs))))))
-
-(defn- expr-str
-  ([_ _] "")
-  ([_ _ & exprs]
-   (let [js (str/join " + " (cons "''" (repeat (count exprs) "(~{})")))]
-     (concat (list 'js* js) exprs))))
-
 (defn- expr-println [_ _ & exprs]
   (let [js (str/join "," (repeat (count exprs) "(~{})"))]
     (concat (list 'js* (str "console.log(" js ")")) exprs)))
@@ -130,8 +110,6 @@
 (def ^:private macro-replacements
   {'&&       'and
    '||       'or
-   '=        'expr/=
-   'str      'expr/str
    'println  'expr/println
    'expr/raw 'expr/raw})
 
@@ -143,24 +121,12 @@
           'do       expr-do
           'if       expr-if
           'not      expr-not
-          '=        expr-eq
-          'str      expr-str
           'println  expr-println
           'raw      expr-raw}})
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-processing (form level)
 ;; ---------------------------------------------------------------------------
-
-(defn- process-not-equals
-  "(not= x y) -> (not (= x y)) to avoid a squint_core dependency."
-  [form]
-  (walk/postwalk
-    (fn [node]
-      (if (and (seq? node) (= 'not= (first node)))
-        (list 'not (cons '= (rest node)))
-        node))
-    form))
 
 (defn- process-macros [form]
   (walk/postwalk
@@ -191,7 +157,7 @@
       form)))
 
 (defn- pre-process [form]
-  (-> form process-not-equals process-macros process-client-params))
+  (-> form process-macros process-client-params))
 
 ;; ---------------------------------------------------------------------------
 ;; Post-processing (compiled JS level)
