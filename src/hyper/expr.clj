@@ -238,8 +238,15 @@
   (atom (sorted-set)))
 
 ;; A future squint release adds the used core names to the compiler output, which replaces this regex.
-(defn- record-core-vars! [js]
-  (when-let [names (seq (map second (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js)))]
+(defn- core-vars-of [js]
+  (into (sorted-set) (map second) (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js)))
+
+(defn use-core-vars!
+  "Adds names to core-vars*.
+   names is a set of munged squint core names.
+   Returns js."
+  [names js]
+  (when-not (every? @core-vars* names)
     (swap! core-vars* into names))
   js)
 
@@ -258,7 +265,6 @@
                                 :core-alias    "hyper_sc"
                                 :macros        compiler-macros})
         replace-deref
-        record-core-vars!
         (restore-signal-casing processed)
         (str/replace #"\n" " ")
         str/trim
@@ -327,8 +333,12 @@
         pairs*     (atom [])
         forms*     (mapv #(infer-boundary % env-locals pairs*) forms)
         template   (join-statements (map compile-form forms*))
-        pairs      @pairs*]
-    (if (empty? pairs)
-      template
-      `(substitute ~template
-                   [~@(map (fn [[ph expr mode]] [ph expr mode]) pairs)]))))
+        names      (core-vars-of template)
+        pairs      @pairs*
+        js         (if (empty? pairs)
+                     template
+                     `(substitute ~template
+                                  [~@(map (fn [[ph expr mode]] [ph expr mode]) pairs)]))]
+    (if (seq names)
+      `(use-core-vars! ~(set names) ~js)
+      js)))

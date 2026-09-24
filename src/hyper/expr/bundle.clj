@@ -10,6 +10,9 @@
 (def ^:private core-dir
   (delay
     (let [dir (fs/create-temp-dir {:prefix "hyper-squint-core"})]
+      (fs/delete-on-exit dir)
+      (fs/delete-on-exit (fs/file dir "core.js"))
+      (fs/delete-on-exit (fs/file dir "entry.js"))
       (with-open [in (io/input-stream (io/resource "squint/core.js"))]
         (io/copy in (fs/file dir "core.js")))
       dir)))
