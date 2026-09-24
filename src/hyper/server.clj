@@ -1007,10 +1007,10 @@
 
 (defn- squint-core-js-handler
   "Returns a handler that serves squint's core.js from the classpath.
-   Serves only the functions h/expr output uses if tree-shake is true, which needs babashka.esbuild."
-  [tree-shake]
+   Serves only the functions h/expr output uses if tree-shake? is true, which needs babashka.esbuild."
+  [tree-shake?]
   (let [js      (slurp (io/resource "squint/core.js"))
-        core-js (when tree-shake (requiring-resolve 'hyper.expr.bundle/core-js))]
+        core-js (when tree-shake? (requiring-resolve 'hyper.expr.bundle/core-js))]
     (fn [_req]
       {:status  200
        :headers {"Content-Type"  "text/javascript; charset=utf-8"
@@ -1293,7 +1293,7 @@
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
                           [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]
-                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler (:tree-shake opts))}]]
+                          [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler (:tree-shake? opts))}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.
          ;; Store global :watches so find-route-watches can prepend them to
