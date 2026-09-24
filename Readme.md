@@ -2048,7 +2048,7 @@ with the `:squint-core-url` option on `create-handler`.
 
 Pass `:tree-shake? true` to `create-handler` to serve only the Squint core
 functions that your `h/expr` expressions use, instead of all of
-`/hyper/squint-core.js` (33 KB gzipped):
+`/hyper/squint-core.js` (28 KB brotli-compressed):
 
 ```clojure
 (h/create-handler #'routes :tree-shake? true)
