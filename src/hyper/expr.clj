@@ -60,35 +60,18 @@
 ;; ---------------------------------------------------------------------------
 ;; Compiler macros (squint's :macros option) that replace the defaults.
 
-(defn- expr-println [_ _ & exprs]
-  (let [js (str/join "," (repeat (count exprs) "(~{})"))]
-    (concat (list 'js* (str "console.log(" js ")")) exprs)))
-
 (defn- expr-raw
   ([_ _] (list 'js* ""))
   ([_ _ x]
    (let [js (str/join (repeat (count x) "~{}"))]
      (concat (list 'js* js) x))))
 
-(def ^:private macro-replacements
-  {'println  'expr/println
-   'expr/raw 'expr/raw})
-
 (def ^:private compiler-macros
-  {'expr {'println expr-println
-          'raw     expr-raw}})
+  {'expr {'raw expr-raw}})
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-processing (form level)
 ;; ---------------------------------------------------------------------------
-
-(defn- process-macros [form]
-  (walk/postwalk
-    (fn [node]
-      (if (and (seq? node) (contains? macro-replacements (first node)))
-        (cons (get macro-replacements (first node)) (rest node))
-        node))
-    form))
 
 (defn- process-client-params
   "Replace client-param symbols ($value, $key, $form-data, … and any
@@ -111,7 +94,7 @@
       form)))
 
 (defn- pre-process [form]
-  (-> form process-macros process-client-params))
+  (process-client-params form))
 
 ;; ---------------------------------------------------------------------------
 ;; Post-processing (compiled JS level)
