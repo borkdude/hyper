@@ -53,3 +53,9 @@ jobs:
         run: nix-shell --run "cljfmt check"
       - name: Run Tests
         run: nix-shell --run "clojure -M:main:test"
+      - name: Run Tree-Shaking Tests
+        run: >-
+          nix-shell --run "clojure -J-Dhyper.tree-shake=true -M:main:test:tree-shake e2e
+          --focus hyper.e2e-test/expr-nested-test
+          --focus hyper.e2e-test/squint-core-version-reload-test
+          --focus hyper.component-e2e-test"
