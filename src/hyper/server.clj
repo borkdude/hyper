@@ -190,7 +190,7 @@
         (let [head-event   (render/format-head-update title head-html)
               sig-attrs    (signal/format-signal-attrs declared-signals)
               div-attrs    (cond-> {:id "hyper-app"}
-                             (:tree-shake? @app-state*) (assoc :data-hyper-core (squint-core-version app-state*))
+                             (:tree-shake? @app-state*) (assoc :data-hyper-squint-version (squint-core-version app-state*))
                              url       (assoc :data-hyper-url url)
                              sig-attrs (merge sig-attrs))
               wrapped-html (c/html [:div div-attrs (c/raw body-html)])
@@ -850,9 +850,9 @@
     window.history.replaceState({title: document.title}, '', window.location.href);
     var observer = new MutationObserver(function(mutations) {
       for (var i = 0; i < mutations.length; i++) {
-        if (mutations[i].attributeName === 'data-hyper-core') {
-          var core = appEl.getAttribute('data-hyper-core');
-          if (window.hyper_sc_v && core && core !== window.hyper_sc_v) {
+        if (mutations[i].attributeName === 'data-hyper-squint-version') {
+          var version = appEl.getAttribute('data-hyper-squint-version');
+          if (window.hyper_squint_version && version && version !== window.hyper_squint_version) {
             window.location.reload();
           }
         }
@@ -864,7 +864,7 @@
         }
       }
     });
-    observer.observe(appEl, { attributes: true, attributeFilter: ['data-hyper-url', 'data-hyper-core'] });
+    observer.observe(appEl, { attributes: true, attributeFilter: ['data-hyper-url', 'data-hyper-squint-version'] });
   }
   window.addEventListener('pageshow', function(event) {
     var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
@@ -908,7 +908,7 @@
         title                                                (or title fallback-title)
         sig-attrs                                            (signal/format-signal-attrs declared-signals)
         div-attrs                                            (cond-> {:id "hyper-app"}
-                                                               tree-shake? (assoc :data-hyper-core core-version)
+                                                               tree-shake? (assoc :data-hyper-squint-version core-version)
                                                                sig-attrs (merge sig-attrs))
         ;; WebKit/Safari fetch-streaming strand workaround: inject the
         ;; EventSource shim only for affected user agents, before the datastar
@@ -928,7 +928,7 @@
                                                                   [:script {:type "module"}
                                                                    (c/raw (str "import * as sc from '" base-path "/hyper/squint-core.js?v=" core-version "';\n"
                                                                                "window.hyper_sc = sc;"
-                                                                               (when tree-shake? (str "\nwindow.hyper_sc_v = '" core-version "';"))))]
+                                                                               (when tree-shake? (str "\nwindow.hyper_squint_version = '" core-version "';"))))]
                                                                   datastar-script
                                                                   (when head-html (c/raw head-html))]
                                                                  [:body

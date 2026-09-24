@@ -1530,11 +1530,11 @@
           (fn []
             (click-counter-button "Session" ".inc")
 
-            (testing "a changed data-hyper-core reloads the page"
+            (testing "a changed data-hyper-squint-version reloads the page"
               (is (wait-for-pred #(nil? (eval-js "window.__sameDocument")) :timeout 10000)))
 
             (testing "the reloaded page imports the changed squint core version"
-              (is (wait-for-pred #(= "changed" (eval-js "window.hyper_sc_v")) :timeout 10000))))))
+              (is (wait-for-pred #(= "changed" (eval-js "window.hyper_squint_version")) :timeout 10000))))))
       (finally
         (swap! @test-state* assoc :tree-shake? tree-shake?)
         (close-browser! browser-info)))))
