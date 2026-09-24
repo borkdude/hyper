@@ -239,13 +239,9 @@
 
 ;; A future squint release adds the used core names to the compiler output, which replaces this regex.
 (defn- record-core-vars! [js]
-  (let [names (into []
-                    (comp (map second)
-                          (filter #(contains? squint/core-vars (symbol %))))
-                    (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js))]
-    (when (seq names)
-      (swap! core-vars* into names))
-    js))
+  (when-let [names (seq (map second (re-seq #"hyper_sc\.([A-Za-z_$][\w$]*)" js)))]
+    (swap! core-vars* into names))
+  js)
 
 (defn compile-form
   "Compile a single (boundary-inferred) form to a Datastar expression
