@@ -603,8 +603,9 @@ decides where code runs, not the syntax.
 Compilation happens at macro-expansion time (via the same embedded
 [Squint](https://github.com/squint-cljs/squint) compiler that powers
 [client components](#client-components-web-components)) — runtime cost is
-string interpolation of spliced values only. Output is dependency-free
-JavaScript suitable for Datastar's sandboxed evaluator.
+string interpolation of spliced values only. Output calls Squint's core
+library through the `hyper_sc` global, which hyper serves at
+`/hyper/squint-core.js`.
 
 ### Actions inside expressions
 
@@ -2042,6 +2043,25 @@ inside segments.
 
 For self-hosted/air-gapped deploys, override the Squint runtime CDN URL
 with the `:squint-core-url` option on `create-handler`.
+
+### Tree shaking
+
+Pass `:tree-shake? true` to `create-handler` to serve only the Squint core
+functions that your `h/expr` expressions use, instead of all of
+`/hyper/squint-core.js` (33 KB gzipped):
+
+```clojure
+(h/create-handler #'routes :tree-shake? true)
+```
+
+Add esbuild to `deps.edn`:
+
+```clojure
+org.babashka/esbuild {:mvn/version "0.1.1"}
+```
+
+Add `--enable-native-access=ALL-UNNAMED` to your JVM options for esbuild.
+Without esbuild on the classpath, `create-handler` throws.
 
 ### Editor indentation
 

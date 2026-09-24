@@ -384,7 +384,7 @@
 (defn start-test-server! []
   (reset! test-state* (atom (state/init-state)))
   (let [handler (h/create-handler #'*test-routes* :app-state @test-state* :head #'test-head-var
-                                  :tree-shake (= "true" (System/getProperty "hyper.tree-shake")))]
+                                  :tree-shake? (= "true" (System/getProperty "hyper.tree-shake")))]
     (reset! test-server (h/start! handler {:port test-port}))))
 
 (defn stop-test-server! []
