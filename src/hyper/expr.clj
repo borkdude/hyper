@@ -237,6 +237,7 @@
   core-vars*
   (atom (sorted-set)))
 
+;; A future squint release adds the used core names to the compiler output, which replaces this regex.
 (defn- record-core-vars! [js]
   (let [names (into []
                     (comp (map second)
