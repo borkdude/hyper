@@ -1010,14 +1010,20 @@
    Serves only the functions h/expr output uses if tree-shake? is true, which needs babashka.esbuild."
   [tree-shake?]
   (let [js      (slurp (io/resource "squint/core.js"))
+        js-br   (delay (br/compress js :quality 11))
         core-js (when tree-shake? (requiring-resolve 'hyper.expr.bundle/core-js))]
-    (fn [_req]
-      {:status  200
-       :headers {"Content-Type"  "text/javascript; charset=utf-8"
-                 "Cache-Control" "no-cache"}
-       :body    (if core-js
-                  (core-js (set @expr/core-vars*))
-                  js)})))
+    (fn [req]
+      (let [br?  (br/accepts-br? req)
+            body (cond
+                   core-js (let [{:keys [js br]} (core-js (set @expr/core-vars*))]
+                             (if br? br js))
+                   br?     @js-br
+                   :else   js)]
+        {:status  200
+         :headers (cond-> {"Content-Type"  "text/javascript; charset=utf-8"
+                           "Cache-Control" "no-cache"}
+                    br? (assoc "Content-Encoding" "br"))
+         :body    body}))))
 
 (defn- -navigation-parameters
   "Coerces navigation parameters with the matched GET route's compiled validator."

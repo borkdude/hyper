@@ -268,6 +268,17 @@
       (is (= 200 (:status response)))
       (is (= "static-ok\n" (slurp (:body response)))))))
 
+(deftest test-squint-core-js
+  (testing "repeated br requests return the identical compressed byte array"
+    (let [handler  (server/create-handler [["/" {:get (fn [_] [:div])}]] (atom (state/init-state)))
+          request  {:uri            "/hyper/squint-core.js"
+                    :request-method :get
+                    :headers        {"accept-encoding" "br"}}
+          response (handler request)]
+      (is (= "br" (get-in response [:headers "Content-Encoding"])))
+      (is (bytes? (:body response)))
+      (is (identical? (:body response) (:body (handler request)))))))
+
 (deftest test-open-when-hidden
   (testing "Default includes openWhenHidden: true in data-init"
     (let [app-state* (atom (state/init-state))
