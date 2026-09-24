@@ -152,12 +152,17 @@
                 (.digest (java.security.MessageDigest/getInstance "SHA-256")
                          (.getBytes ^String (slurp (io/resource "squint/core.js")) "UTF-8")))))
 
+(defn- used-core-vars
+  "Returns the munged squint core names that h/expr output and defc components use."
+  []
+  (into (set @expr/core-vars*) (component.bundle/core-vars)))
+
 (defn- squint-core-version
   "Returns a version string for the squint core that /hyper/squint-core.js serves.
    The version changes if the served JS changes."
   [app-state*]
   (if (:tree-shake? @app-state*)
-    (Integer/toHexString (hash [@squint-core-sha @expr/core-vars*]))
+    (Integer/toHexString (hash [@squint-core-sha (used-core-vars)]))
     (subs @squint-core-sha 0 12)))
 
 (defn- handle-full-render
@@ -899,7 +904,7 @@
    Shared by page-handler and not-found-handler so both emit identical document
    scaffolding, differing only in `status` and `fallback-title` (the <title>
    used when the result has no :title)."
-  [result {:keys [datastar-script open-when-hidden? base-path webkit-sse-shim? core-version tree-shake?]
+  [result {:keys [datastar-script open-when-hidden? base-path webkit-sse-shim? core-version tree-shake? squint-core-url]
            :or   {open-when-hidden? true
                   base-path         ""
                   webkit-sse-shim?  true}}
@@ -926,7 +931,7 @@
                                                                   [:title title]
                                                                   webkit-shim
                                                                   [:script {:type "module"}
-                                                                   (c/raw (str "import * as sc from '" base-path "/hyper/squint-core.js?v=" core-version "';\n"
+                                                                   (c/raw (str "import * as sc from '" (or squint-core-url (str base-path "/hyper/squint-core.js?v=" core-version)) "';\n"
                                                                                "window.hyper_sc = sc;"
                                                                                (when tree-shake? (str "\nwindow.hyper_squint_version = '" core-version "';"))))]
                                                                   datastar-script
@@ -1011,10 +1016,9 @@
    URL forever, so a later URL reuse (e.g. reverting an edit) would serve
    that stale entry until a hard refresh.  A mismatched (or missing) `?v=`
    is therefore served `no-cache` so the browser always revalidates."
-  [app-state*]
+  []
   (fn [req]
-    (if-let [{:keys [js hash]} (component.bundle/bundle
-                                 {:squint-core-url (get @app-state* :squint-core-url)})]
+    (if-let [{:keys [js hash]} (component.bundle/bundle)]
       (let [requested (get-in req [:query-params "v"])
             matched?  (= requested hash)]
         {:status  200
@@ -1039,7 +1043,7 @@
     (fn [req]
       (let [br?  (br/accepts-br? req)
             body (cond
-                   core-js (let [{:keys [js br]} (core-js (set @expr/core-vars*))]
+                   core-js (let [{:keys [js br]} (core-js (used-core-vars))]
                              (if br? br js))
                    br?     @js-br
                    :else   js)]
@@ -1325,7 +1329,7 @@
                           [(str base-path "/hyper/actions") {:post (action-handler app-state*)}]
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
-                          [(str base-path "/hyper/components.js") {:get (components-js-handler app-state*)}]
+                          [(str base-path "/hyper/components.js") {:get (components-js-handler)}]
                           [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler app-state* (:tree-shake? opts))}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.
@@ -1346,7 +1350,6 @@
                                 :disconnect-grace-ms disconnect-grace-ms
                                 :heartbeat-ms heartbeat-ms
                                 :open-when-hidden? (get opts :open-when-hidden? true)
-                                :squint-core-url (:squint-core-url opts)
                                 :tree-shake? (:tree-shake? opts))
          initial-routes  (if (var? routes) @routes routes)
          initial-handler (build-ring-handler initial-routes app-state* page-wrapper system-routes default-handler)

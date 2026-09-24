@@ -2041,13 +2041,14 @@ Hyper ships clj-kondo config (see [clj-kondo](#clj-kondo)) that validates
 `defc` structure at lint time and makes attrs, `emit`, and `ctx` resolve
 inside segments.
 
-For self-hosted/air-gapped deploys, override the Squint runtime CDN URL
-with the `:squint-core-url` option on `create-handler`.
+Set `:squint-core-url` on `create-handler` to load the Squint core from
+another URL, such as a CDN. By default hyper serves it at
+`/hyper/squint-core.js`, for `h/expr` and components.
 
 ### Tree shaking
 
 Pass `:tree-shake? true` to `create-handler` to serve only the Squint core
-functions that your `h/expr` expressions use, instead of all of
+functions that your `h/expr` expressions and `defc` components use, instead of all of
 `/hyper/squint-core.js` (28 KB brotli-compressed):
 
 ```clojure

@@ -926,11 +926,10 @@
    Options (keyword arguments):
    - :app-state         — Atom for application state (default: fresh atom)
    - :datastar-script   - Override of the default datastar script tag (as Hiccup) or nil to suppress
-   - :squint-core-url   — Override of the squint core.js URL used by the client
-                          components bundle (default: version-matched jsDelivr CDN).
-                          Point at a self-hosted copy for offline/air-gapped deploys.
+   - :squint-core-url   - URL the page imports squint core from, for h/expr and
+                          components (default: /hyper/squint-core.js, served by hyper).
    - :tree-shake?       - Serve only the squint core functions that h/expr output
-                          uses. Needs babashka.esbuild on the classpath.
+                          and defc components use. Needs babashka.esbuild on the classpath.
    - :head              — Hiccup nodes appended to the HTML <head>, or (fn [req] ...) -> hiccup
    - :webkit-sse-shim?  — Inject a small client shim (into <head>, only for WebKit/Safari
                           user agents) that routes the GET render stream through a native

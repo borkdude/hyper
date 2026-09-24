@@ -2,21 +2,16 @@
   "Assembly and serving support for the client-components JS bundle.
 
    Components registered in hyper.component/registry* are assembled into a
-   single ES module — squint core import, the hyper component runtime
-   (resources/hyper/component-runtime.js), then each compiled component —
-   served at /hyper/components.js (see hyper.server) and injected into the
-   page head with a content-hashed URL (see hyper.render), which makes the
-   response immutable-cacheable and lets REPL redefinition hot-swap the
-   bundle over SSE."
+   single ES module with a binding to the page's squint core, the hyper
+   component runtime (resources/hyper/component-runtime.js) and each compiled
+   component.  The module is served at /hyper/components.js (see
+   hyper.server) and injected into the page head with a content-hashed URL
+   (see hyper.render), which makes the response immutable-cacheable and lets
+   REPL redefinition hot-swap the bundle over SSE."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hyper.component :as component]))
-
-(def default-squint-core-url
-  "CDN URL for squint's core.js runtime, version-matched to the compiler
-   dependency in deps.edn.  Override via the :squint-core-url option on
-   create-handler to self-host."
-  "https://cdn.jsdelivr.net/npm/squint-cljs@0.9.184/src/squint/core.js")
+            [hyper.component :as component]
+            [hyper.expr :as expr]))
 
 (defn- runtime-js []
   (slurp (io/resource "hyper/component-runtime.js")))
@@ -53,8 +48,8 @@
                 pairs))))
 
 (defn- assemble-bundle
-  [registry squint-core-url]
-  (let [js (str "import * as $sc from '" (or squint-core-url default-squint-core-url) "';\n"
+  [registry]
+  (let [js (str "const $sc = window.hyper_sc;\n"
                 (import-lines registry)
                 (runtime-js)
                 "\n"
@@ -69,20 +64,31 @@
   "Assemble (or return cached) the components JS bundle.
 
    Returns {:js \"...\" :hash \"...\"} or nil when no components are
-   registered.  The bundle is a single ES module: squint core import,
-   the hyper component runtime, then each registered component sorted
-   by name.  Cached against the registry snapshot + core URL."
-  ([] (bundle nil))
-  ([{:keys [squint-core-url]}]
-   (let [registry @component/registry*]
-     (when (seq registry)
-       (let [cache-key [registry squint-core-url]
-             cached    @bundle-cache*]
-         (if (= cache-key (:key cached))
-           (:bundle cached)
-           (let [b (assemble-bundle registry squint-core-url)]
-             (reset! bundle-cache* {:key cache-key :bundle b})
-             b)))))))
+   registered.  The bundle is a single ES module: a binding to the page's
+   squint core (window.hyper_sc), the hyper component runtime, then each
+   registered component sorted by name.  Cached against the registry snapshot."
+  []
+  (let [registry @component/registry*]
+    (when (seq registry)
+      (let [cached @bundle-cache*]
+        (if (= registry (:key cached))
+          (:bundle cached)
+          (let [b (assemble-bundle registry)]
+            (reset! bundle-cache* {:key registry :bundle b})
+            b))))))
+
+(defonce ^:private core-vars-cache* (atom nil))
+
+(defn core-vars
+  "Returns the munged squint core names that the registered components use."
+  []
+  (let [registry                @component/registry*
+        [cached-registry names] @core-vars-cache*]
+    (if (identical? registry cached-registry)
+      names
+      (let [names (into #{} (mapcat #(expr/core-vars-of "$sc" (:js %))) (vals registry))]
+        (reset! core-vars-cache* [registry names])
+        names))))
 
 (defn head-script-tag
   "Hiccup script tag for the components bundle, or nil when no components
@@ -90,7 +96,7 @@
    endpoint can serve immutable cache headers and a registry change rotates
    the URL (which, combined with head-element fingerprint diffing, makes
    REPL redefinition hot-swap the bundle over SSE)."
-  [base-path opts]
-  (when-let [{:keys [hash]} (bundle opts)]
+  [base-path]
+  (when-let [{:keys [hash]} (bundle)]
     [:script {:type "module"
               :src  (str base-path "/hyper/components.js?v=" hash)}]))
