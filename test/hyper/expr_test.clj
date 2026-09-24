@@ -61,7 +61,7 @@
       (is (str/ends-with? out "; return __hyper_r;"))))
 
   (testing "evt and el pass through as client-side symbols"
-    (is (= "((evt.key) === (\"Enter\"))" (->expr (= evt.key "Enter"))))
+    (is (= "(evt.key === \"Enter\")" (->expr (= evt.key "Enter"))))
     (is (str/includes? (->expr (.focus el)) "el.focus()"))))
 
 ;; ---------------------------------------------------------------------------
@@ -69,13 +69,17 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest test-sandbox-safe-output
-  (testing "boolean and equality forms compile to bare JS operators"
+  (testing "= with a literal compiles to ==="
     (let [out (->expr (and (= $a 1) (or $b evt.shiftKey)))]
-      (is (str/includes? out "(($a) === (1))"))
+      (is (str/includes? out "($a === 1)"))
       (is (str/includes? out "&&"))
-      (is (str/includes? out "evt.shiftKey")))
-    (is (= "!(($name) === (\"\"))" (->expr (not= $name ""))))
-    (is (= "'' + (\"n=\") + ($n)" (->expr (str "n=" $n)))))
+      (is (str/includes? out "evt.shiftKey"))))
+
+  (testing "not= compiles to hyper_sc._EQ_"
+    (is (= "!hyper_sc._EQ_($name, \"\")" (->expr (not= $name "")))))
+
+  (testing "str compiles to a template literal"
+    (is (= "`${\"n=\"}${$n??''}`" (->expr (str "n=" $n)))))
 
   (testing "when compiles to a ternary"
     (let [out (->expr (when $open (@post "/x")))]
@@ -117,12 +121,12 @@
 
   (testing "deref reads as a signal reference"
     (let [name* (sig "userName")]
-      (is (= "!(($userName) === (\"\"))" (->expr (not= @name* ""))))
+      (is (= "!hyper_sc._EQ_($userName, \"\")" (->expr (not= @name* ""))))
       (is (= "$userName" (->expr @name*)))))
 
   (testing "the full guard + assign + action composition"
     (let [query* (sig "q")]
-      (is (= (str "var __hyper_r = (((((evt.key) === (\"Enter\"))) ? "
+      (is (= (str "var __hyper_r = ((((evt.key === \"Enter\")) ? "
                   "((() => { $q = evt.target.value; return @post(\"/search\") })()) : (null))); "
                   "return __hyper_r;")
              (->expr (when (= evt.key "Enter")
@@ -183,7 +187,7 @@
   (testing "deref of a top-level var holding a signal splices to a $ref"
     (is (= "hyper_sc.not($_hyperConnected)"
            (->expr (not @signal/connected?*))))
-    (is (= "(($_hyperConnection) === (\"reconnecting\"))"
+    (is (= "($_hyperConnection === \"reconnecting\")"
            (->expr (= @signal/connection* :reconnecting)))))
 
   (testing "keyword and string tokens compile identically"
@@ -230,7 +234,7 @@
       (rendering app-state*
                  (let [out (h/expr (when (= evt.key "Enter")
                                      (h/action (reset! (h/tab-cursor :q) 2))))]
-                   (is (str/includes? out "(evt.key) === (\"Enter\")"))
+                   (is (str/includes? out "evt.key === \"Enter\""))
                    (is (str/includes? out "@post('/hyper/actions?action-id=a_t_1')"))
                    (is (str/includes? out "?"))
                    (is (not (str/includes? out "action(")))))))
@@ -247,7 +251,7 @@
 
 (deftest test-client-params-in-expr
   (testing "client-param symbols expand to their client-side JS"
-    (is (= "((evt.key) === (\"Enter\"))" (->expr (= $key "Enter"))))
+    (is (= "(evt.key === \"Enter\")" (->expr (= $key "Enter"))))
     (is (= "evt.target.checked" (->expr $checked)))
     (is (= "evt.detail" (->expr $detail)))
     (is (= "Object.fromEntries(new FormData(evt.target.closest('form')))"
@@ -268,5 +272,5 @@
       (rendering app-state*
                  (let [out (h/expr (when (= $key "Enter")
                                      (h/action (reset! (h/tab-cursor :q) $value))))]
-                   (is (str/includes? out "(evt.key) === (\"Enter\")"))
+                   (is (str/includes? out "evt.key === \"Enter\""))
                    (is (str/includes? out "hyper.encodeClientParams({value:evt.target.value})")))))))
