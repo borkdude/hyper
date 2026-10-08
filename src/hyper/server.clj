@@ -1032,6 +1032,19 @@
        :headers {"Content-Type" "text/plain"}
        :body    "No components registered"})))
 
+(defn- components-js-map-handler
+  "Serve the source map of the client-components bundle."
+  []
+  (fn [_req]
+    (if-let [source-map (:source-map (component.bundle/bundle))]
+      {:status  200
+       :headers {"Content-Type" "application/json; charset=utf-8"
+                 "Cache-Control" "no-cache"}
+       :body    source-map}
+      {:status  404
+       :headers {"Content-Type" "text/plain"}
+       :body    "No source map"})))
+
 (defn- squint-core-js-handler
   "Returns a handler that serves squint's core.js from the classpath.
    Serves only the functions h/expr output uses if tree-shake? is true, which needs babashka.esbuild.
@@ -1329,6 +1342,7 @@
                           [(str base-path "/hyper/upload") {:post upload-route}]
                           [(str base-path "/hyper/navigate") {:post (navigate-handler app-state*)}]
                           [(str base-path "/hyper/components.js") {:get (components-js-handler)}]
+                          [(str base-path "/hyper/components.js.map") {:get (components-js-map-handler)}]
                           [(str base-path "/hyper/squint-core.js") {:get (squint-core-js-handler app-state* (:tree-shake? opts))}]]
          ;; Store the routes source (Var or value) so title resolution can
          ;; always read the latest route metadata, even between router rebuilds.

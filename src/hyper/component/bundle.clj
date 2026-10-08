@@ -10,7 +10,8 @@
    REPL redefinition hot-swap the bundle over SSE."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hyper.component :as component]))
+            [hyper.component :as component]
+            [squint.compiler.source-map :as sm]))
 
 (defn- runtime-js []
   (slurp (io/resource "hyper/component-runtime.js")))
@@ -46,16 +47,40 @@
                   (str "import * as " (munge (name alias)) " from '" url "';\n"))
                 pairs))))
 
+(defn- source-text [path]
+  (when path
+    (or (some-> (io/resource path) slurp)
+        (let [f (io/file path)] (when (.exists f) (slurp f))))))
+
+(defn- bundle-source-map
+  "Returns the source map JSON for components placed after prefix, joined with
+   newlines, or nil if no component carries segments."
+  [prefix components]
+  (let [sources (vec (distinct (keep (comp :source :source-map) components)))
+        index (zipmap sources (range))
+        segments (loop [[c & more] components, text prefix, acc []]
+                   (if-not c
+                     acc
+                     (let [{:keys [segments source]} (:source-map c)
+                           acc (into acc (map #(conj (vec (take 4 %)) (index source)))
+                                     (when source (sm/shift-segments segments text)))]
+                       (recur more (str text (:js c) "\n") acc))))]
+    (when (seq segments)
+      (sm/encode segments {:file "components.js"
+                           :sources sources
+                           :sources-content (mapv source-text sources)}))))
+
 (defn- assemble-bundle
   [registry]
-  (let [js (str "const $sc = window.hyper_sc;\n"
-                (import-lines registry)
-                (runtime-js)
-                "\n"
-                (->> (sort-by key registry)
-                     (map (comp :js val))
-                     (str/join "\n")))]
-    {:js js :hash (sha256-hex js)}))
+  (let [prefix (str "const $sc = window.hyper_sc;\n"
+                    (import-lines registry)
+                    (runtime-js)
+                    "\n")
+        components (map val (sort-by key registry))
+        source-map (bundle-source-map prefix components)
+        js (cond-> (str prefix (str/join "\n" (map :js components)))
+             source-map (str "\n//# sourceMappingURL=components.js.map\n"))]
+    {:js js :hash (sha256-hex js) :source-map source-map}))
 
 (defonce ^:private bundle-cache* (atom nil))
 
